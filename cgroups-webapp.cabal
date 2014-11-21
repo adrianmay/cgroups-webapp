@@ -54,4 +54,5 @@ executable cgroups-webapp
   build-depends:       happstack-server
   build-depends:       mtl
   build-depends:       directory
+  build-depends:       bytestring
       

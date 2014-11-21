@@ -1,9 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
-module MiscFSTools (
-  ifM, (>^>),
-  localState, Viewpoint, 
-  getAllSubdirs, getDirectSubdirs, 
-  createGroup, insertPid
+module miscfstools (
+  ifm, (>^>),
+  localstate, viewpoint, 
+  getallsubdirs, getdirectsubdirs, 
+  creategroup, insertpid
   ) where 
   
 -- THIS EXPECTS THAT ALL CGROUPS ARE MOUNTED
@@ -26,18 +26,8 @@ module MiscFSTools (
 -- show pids in one cgroup
 -- show pids not in one cgroup
 
-  -- random crumbs...
 
-  ifM cond tc fc = cond >>= \res -> if res then tc else fc
-
-  infixr 1 >^>
-  (>^>) :: (Arrow a) => a z (b,c) -> (b -> c -> d) -> a z d
-  (>^>) a f = a >>> (arr.uncurry) f
-
-  parentPath :: FilePath -> FilePath
-  parentPath = reverse >>> dropWhile (/='/') >>> drop 1 >>> reverse 
-
-  -- general directory operations...
+  -- general directory operations -----------------------------
 
   getDirectSubdirs :: FilePath -> IO [FilePath]
   -- not including abs
@@ -62,6 +52,16 @@ module MiscFSTools (
     mapM getAllSubdirs >>= 
     ( concat >>> (abs:)  >>> return )
 
+  -- random crumbs --------------------------------------------
+
+  ifM cond tc fc = cond >>= \res -> if res then tc else fc
+
+  infixr 1 >^>
+  (>^>) :: (Arrow a) => a z (b,c) -> (b -> c -> d) -> a z d
+  (>^>) a f = a >>> (arr.uncurry) f
+
+  parentPath :: FilePath -> FilePath
+  parentPath = reverse >>> dropWhile (/='/') >>> drop 1 >>> reverse 
 
   -- cgroup stuff ---------------------------------------
 
