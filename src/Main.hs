@@ -23,6 +23,7 @@ main :: IO ()
 
 myPolicy :: BodyPolicy
 myPolicy = (defaultBodyPolicy "/tmp/" 0 1000 1000)
+
 main = simpleHTTP nullConf $ msum 
        [ do method GET >> ( uriRest onGet ) 
        , do method PUT >> decodeBody myPolicy >> 
@@ -47,7 +48,7 @@ renderGet url (mounts,ei) = return $ do
   table ! class_ "nav" $ tr ! class_ "nav" $ do
     td $ a ! href "/" $ "Help"
     forM_ (map (fst >>> makeLink True) mounts) td
-    ( either (toHtml >>> h1) (renderGroup url) ) ei
+  ( either (toHtml >>> h1) (renderGroup url) ) ei
 
 renderGroup :: String -> CGroupState -> Html
 renderGroup url (maybeparent, children, pidsin, pidsout) = do
@@ -62,9 +63,18 @@ renderGroup url (maybeparent, children, pidsin, pidsout) = do
       td  ! class_ "col" $ do 
         forM_ (maybe children (:children) maybeparent) (makeLink2 url >>> H.div) 
       td  ! class_ "col" $ do 
-        forM_ pidsin ((++" ") >>> toHtml >>> H.span ! class_ "pid")
+        forM_ pidsin $ \pid -> do 
+          H.span " "
+          H.span ! class_ "pid" $ toHtml pid
+          H.span " "
+        
+        --(toHtml >>> H.span ! class_ "pid")
       td  ! class_ "col" $ do 
-        forM_ pidsout (\pid -> ((++" ") >>> toHtml >>> H.span ! class_ "pid" ! onclick (toValue ("insertPid('"++url++"',"++pid++")"))) pid)
+        forM_ pidsout $ \pid -> do 
+        --(toHtml >>> H.span ! class_ " pid pidout" ! onclick (toValue ("insertPid('"++url++"',"++pid++")"))) pid)
+          H.span " "
+          H.span ! class_ "pid pidout"  ! onclick (toValue ("insertPid('"++url++"',"++pid++")")) $ toHtml pid
+          H.span " "
 
 makeLink :: Bool -> String -> Html
 makeLink abs el = (toHtml >>> a ! href (toValue (if abs then "/"++el else el))) el 
@@ -72,43 +82,6 @@ makeLink abs el = (toHtml >>> a ! href (toValue (if abs then "/"++el else el))) 
 makeLink2 :: String -> String -> Html
 makeLink2 rel = \el -> ( (a ! href (toValue (rel++"/"++el))).toHtml) el 
 
-{-
-
-page :: String -> UIBundle -> IO Html
--}    
-  {-
-    ( ifM ( doesDirectoryExist abs )
-          ( getDirectoryContents abs >>= \ dc -> -- (getDirectoryContents abs) returns IO [String]
-            readFile (abs++"/tasks") >>= \tasks ->
-            return ( table $ tr $
-              ( td $ table ( forM_ (drop 1 dc)   ( \el -> (tr . td . (a ! href (toValue el)).toHtml) el ) ) ) >>
-              ( td $ table ( forM_ (words tasks) (tr.td.toHtml)   ) ) 
-            )
-          )
-          ( return (toHtml ("Nothing there"::String)) )
-   )
-
-
-page rel (mounts, (parent, children),(pidsin, pidsout)) = return $
-   h3 (toHtml rel) >>
-   table ( tr (
-     (td . table) (forM_ (parent:children) (makeLink rel >>> td >>> tr)) >>
-     td ("Bar") >>
-     td ("Wop") 
-   ))
-
-onPut rel = page $ ("You put "++rel,([],[]))
-
--- Takes (header, (buttons,rows)) and draws a single column table of links...
-page :: (String, ([String],[String])) -> ServerPartT IO Response
-page (ford,(buttons,pidlist)) = 
-  (ok.ourTemplate.toHtml) $ 
-    table $ 
-    (tr.th.toHtml) ford >> 
-    forM_ buttons (tr.td.mybutton) >> 
-    ( forM_ pidlist ( \el -> (tr.td.(a ! href (toValue el)).toHtml) el ) )
-
-   -}
 ourTemplate :: Html -> Response
 ourTemplate s =
    toResponse $
@@ -163,7 +136,7 @@ myscript = script $ toHtml ("                      \
 
 mystyle = H.style $ toHtml ("\
   \td { vertical-align:top; } \n\
-  \a { background-color:yellow; } \n\
+  \a, .pidout { background-color:lightblue; } \n\
   \.pid { padding-right:5px; padding-left:5px; } \n\
   \.big, .nav { width:100%; } \n\
   \.col { width:33%; } \n"::String)
