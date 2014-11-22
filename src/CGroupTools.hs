@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-module CGroupTools (uiBundle, UIBundle, CGroupState, putGroup, (>^>)) where
+module CGroupTools (uiBundle, UIBundle, CGroupState, putSomething, (>^>)) where
 
 -- The UI will address cgroups by subsystem, not mount point
 
@@ -64,6 +64,7 @@ type CGroupState = ( -- of a cgroup
   [Pid], -- pids included 
   [Pid]) -- pids elsewhere
 
+-- this is what the UI needs to process a GET...
 type UIBundle = ([Mount], Either String CGroupState)
 
 
@@ -81,6 +82,9 @@ uiBundle ('/':url) =
       case url of
         [] -> ( Left >>> (mounts,) >>> return ) "Instructions"  
         _ -> case (filter (fst >>> (==subsys)) mounts ) of 
+           -- expect one matching mount then return all mounts 
+           -- (although the UI only needs the subsystem name)
+           -- along with the group state
            (m:[]) -> cGroupState m subsys group >>= ( Right >>> (mounts,) >>> return )
            _ -> ( Left >>> (mounts,) >>> return ) "Bad subsystem requested"  
     
@@ -91,14 +95,18 @@ getMounts =
   (readFile "/proc/mounts" >>=
    ( lines >>> map words >>> 
     filter ( \(w:_) -> w=="cgroup" ) >>>
+    -- found lines about cgroups but extracting subsystem names is fiddly
     map ( \(_:mountpoint:_:options:_) -> (ss options, mountpoint) ) >>>
     return ))-- might return empty list
   where 
-    ss = map (\case ',' -> ' '; c -> c) >>> 
-      words >>> 
+    -- cheat's parse: swap commas for spaces and call words
+    ss = map (\case ',' -> ' '; c -> c) >>> words >>> 
+      -- usually the susbsystem name is somewhere in the options list
+      -- but for systemd it says "name=systemd" so we also try after dropping 5
       filter ((||) <$> flip elem allSubsystems <*> (drop 5 >>> flip elem allSubsystems)) >>> 
+      -- remove "name=" if it's there
       map (\case (n:a:m:e:'=':rest) -> rest; s -> s) >>>
-      intercalate ","
+      intercalate "," -- e.g. cpuacct,cpu
 
 -- maybe we can ask the system for this...
 allSubsystems = ["systemd", "blkio", "cpu", "cpuacct", "cpuset", "devices", 
@@ -113,14 +121,14 @@ cGroupState mount subsys group =
   in
     getDirectSubdirs abs >>= \children -> 
     pidsInAndOut (snd mount) abs >>= \(pidsin, pidsout) ->
-    return (Just "..", children, pidsin, pidsout)
+    return (Just "..", children, pidsin, pidsout) -- didnt need that Maybe in the end
 
-
+-- return list of pids in the group and a list of all other pids 
 pidsInAndOut :: FilePath -> FilePath -> IO ([Pid],[Pid])
 -- both parameters are absolute paths
 pidsInAndOut mountpoint group =
   pidsAt group >>= \pidsin ->
-  getAllSubdirs mountpoint >>= 
+  getAllSubdirs mountpoint >>= -- that's the whole directory tree under and including mountpoint
   ( (filter (/= group)) >>> mapM pidsAt ) >>= \pidsout ->
   return (pidsin, concat pidsout)
 
@@ -134,10 +142,10 @@ pidsAt dir = readFile (dir ++ "/tasks") >>= ( return . words )
 --   Catch file op failures 
 --   Sanity check pid
 
-putGroup :: String -> String -> IO ()
+putSomething :: String -> String -> IO ()
 -- called by ajax and return discarded
 -- see result on next get
-putGroup bod ('/':url) = 
+putSomething bod ('/':url) = 
   let 
     subsys = takeWhile (/='/') url
     group = (dropWhile (/='/') >>> drop 1) url
@@ -151,14 +159,15 @@ putGroup bod ('/':url) =
           _  -> insertPid (mp ++ "/" ++ group) bod
       _ -> return ()
 
-
+-- returns nothing because the UI won't check...
+-- it does this by ajax and discards the result
+-- then re-GETs some relevant group
 createGroup :: String -> String -> IO ()
 createGroup parentpath grouppath = 
   doesDirectoryExist grouppath >>= choose 
-    ( return () )
-    ( doesDirectoryExist parentpath >>= choose
-      ( createDirectory grouppath )
-      --( putStrLn grouppath )
+    ( return () ) -- bomb out if the thing to create exists
+    ( doesDirectoryExist parentpath >>= choose -- or its parent doesn't
+      ( createDirectory grouppath ) -- finally hit the metal
       ( return () )
     )
 

@@ -27,17 +27,22 @@ myPolicy = (defaultBodyPolicy "/tmp/" 0 1000 1000)
 main = simpleHTTP nullConf $ msum 
        [ do method GET >> ( uriRest onGet ) 
        , do method PUT >> decodeBody myPolicy >> 
+              -- I wanted the body to simply be the pid without the pid=
+              --  but happstack wouldn't play ball
               (look "pid" >>= ( onPut >>> uriRest )) 
-              `mappend`
-              ( uriRest $ onPut "" ) 
+              `mappend` -- catch the very common case that look fails cos there's no pid
+              ( uriRest $ onPut "" ) -- So the putter in the other file interprets this
+              -- blank to mean createGroup instead of insertPid. That looks goofy in 
+              -- haskell but it's already like that in REST so we wouldn't gain
+              -- generality by splitting it up.
        , (ourTemplate >>> badRequest) "Just GET or PUT please"
        ]
 
 onGet :: String -> ServerPartT IO Response
 onPut :: String -> String -> ServerPartT IO Response
 --onPut url = (ourTemplate >>> ok) $ h3 $ toHtml $ "You put "++url
-onGet url = liftIO ( uiBundle url >>= renderGet url ) >>= (ourTemplate >>> ok) 
-onPut bod url = liftIO ( putGroup bod url >>  renderPut     ) >>= (ourTemplate >>> ok) 
+onGet url     = liftIO ( uiBundle url        >>= renderGet url ) >>= (ourTemplate >>> ok) 
+onPut bod url = liftIO ( putSomething bod url >> renderPut     ) >>= (ourTemplate >>> ok) 
       
 renderPut :: IO Html
 renderPut = return $ toHtml ("Foo"::String)
@@ -93,16 +98,6 @@ ourTemplate s =
                 , mystyle
                 ]
                 s
-
-mybutton :: String -> Html
-mybutton s = H.form ! A.method "PUT" $ 
-              ( input ! type_ "text" 
-                       ! name "name"
-              ) >> 
-              ( input ! type_ "submit" 
-                      ! value "Create CGroup" 
-                      ! onclick (toValue $ "window.href=" ++ s ++ ";")
-              )
 
 myscript, mystyle :: Html
 
