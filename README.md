@@ -5,9 +5,9 @@ Web app for manipulating cgroups in nixos
 
 Written in Haskell with Happstack and Blaze
 
-Needs root
+Listens on 8000 (configurable later) but still needs root to write to the cgroup vfs.
 
-Shows a horizontal nav bar of susbsytems followed by a three-column table: parent and children, pids in the group, pids not in the group which you can add by clicking them
+Shows the current group name followed by a horizontal nav bar of subsystems followed by a three-column table: parent and children, pids in the group, pids not in the group which you can add to it by clicking them. There's also a button to make a new group as a child of the current one which prompts for the name. 
 
 Reads cgroup mount points from /proc/mounts including systemd which is wierd.
 
