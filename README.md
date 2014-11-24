@@ -21,8 +21,8 @@ POST, HEAD, etc do nothing.
 
 TODO: 
 
-Doesn't sanity check the body yet
-
-Tries to avoid filesystem errors but doesn't catch them yet - you just get 500 if e.g. you're not root.
+Tries to avoid filesystem errors but doesn't catch them yet.
 
 It ain't pretty.
+
+

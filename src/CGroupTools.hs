@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-module CGroupTools (uiBundle, UIBundle, CGroupState, putSomething, (>^>)) where
+module CGroupTools (uiBundle, UIBundle, CGroupState, putSomething, (>^>), intFromStringOr) where
 
 -- The UI will address cgroups by subsystem, not mount point
 
@@ -26,6 +26,11 @@ infixr 1 >^>
 parentPath :: FilePath -> FilePath
 parentPath = reverse >>> dropWhile (/='/') >>> drop 1 >>> reverse 
 
+intFromStringOr :: Int -> String -> Int
+intFromStringOr defolt p = 
+  case reads p :: [(Int, String)] of
+    [] -> defolt
+    ((i,s):_) -> i
 
 -- General directory operations -----------------------------
 
@@ -85,7 +90,7 @@ uiBundle ('/':url) =
            -- expect one matching mount then return all mounts 
            -- (although the UI only needs the subsystem name)
            -- along with the group state
-           (m:[]) -> cGroupState m subsys group >>= ( Right >>> (mounts,) >>> return )
+           (m:[]) -> cGroupState m subsys group >>= ( (mounts,) >>> return )
            _ -> ( Left >>> (mounts,) >>> return ) "Bad subsystem requested"  
     
 
@@ -113,15 +118,17 @@ allSubsystems = ["systemd", "blkio", "cpu", "cpuacct", "cpuset", "devices",
                  "freezer", "memory", "net_cls", "net_prio", "ns" ]
 
 
-cGroupState :: Mount -> String -> FilePath -> IO CGroupState
+cGroupState :: Mount -> String -> FilePath -> IO (Either String CGroupState)
 --cGroupState mount subsys [] = return $ (Nothing, ["Foo"], [], [])
 cGroupState mount subsys group = 
   let 
     abs = if length group == 0 then snd mount else snd mount ++ "/" ++ group 
-  in
-    getDirectSubdirs abs >>= \children -> 
-    pidsInAndOut (snd mount) abs >>= \(pidsin, pidsout) ->
-    return (Just "..", children, pidsin, pidsout) -- didnt need that Maybe in the end
+  in ifM (doesDirectoryExist abs)
+         ( getDirectSubdirs abs >>= \children -> 
+           pidsInAndOut (snd mount) abs >>= \(pidsin, pidsout) ->
+           return $ Right ( if group == "" then Nothing else Just "..", 
+                            children, pidsin, pidsout) ) 
+         ( return $ Left "No such group")
 
 -- return list of pids in the group and a list of all other pids 
 pidsInAndOut :: FilePath -> FilePath -> IO ([Pid],[Pid])
@@ -171,11 +178,12 @@ createGroup parentpath grouppath =
       ( return () )
     )
 
-
 insertPid :: String -> String -> IO ()
 insertPid grouppath pid =
-  --sanity check pid here
-  writeFile (grouppath++"/tasks") (pid++"\n")
+  --sanity check pid
+  case intFromStringOr 0 pid of
+    0 -> return ()
+    _ -> writeFile (grouppath++"/tasks") (pid++"\n")
 
 
 

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 module Main where
 
 import Control.Arrow 
@@ -7,6 +8,7 @@ import Control.Monad
 import Data.Monoid 
 import Control.Monad.Trans 
 import System.Directory
+import System.Environment   
 import Data.List
 import Data.Either
 import CGroupTools
@@ -21,31 +23,43 @@ import Data.ByteString.Lazy.Char8 (unpack)
 
 main :: IO ()
 
+defaultPort = 8000::Int;
+
 myPolicy :: BodyPolicy
 myPolicy = (defaultBodyPolicy "/tmp/" 0 1000 1000)
 
-main = simpleHTTP nullConf $ msum 
-       [ do method GET >> ( uriRest onGet ) 
-       , do method PUT >> decodeBody myPolicy >> 
-              -- I wanted the body to simply be the pid without the pid=
-              --  but happstack wouldn't play ball
-              (look "pid" >>= ( onPut >>> uriRest )) 
-              `mappend` -- catch the very common case that look fails cos there's no pid
-              ( uriRest $ onPut "" ) -- So the putter in the other file interprets this
-              -- blank to mean createGroup instead of insertPid. That looks goofy in 
-              -- haskell but it's already like that in REST so we wouldn't gain
-              -- generality by splitting it up.
-       , (ourTemplate >>> badRequest) "Just GET or PUT please"
-       ]
+main = getArgs >>= (
+         -- read port from command line and check it's an integer
+         (\case 
+           (p:_) -> intFromStringOr defaultPort p
+           [] -> defaultPort) >>> \port ->
+         -- start web server   
+         simpleHTTP nullConf { port = port } $ msum 
+         [ do method GET >> ( uriRest onGet ) 
+         , do method PUT >> decodeBody myPolicy >> 
+                -- I wanted the body to simply be the pid without the pid=
+                --  but happstack wouldn't play ball
+                (look "pid" >>= ( onPut >>> uriRest )) 
+                `mappend` -- catch the very common case that look fails cos there's no pid
+                ( uriRest $ onPut "" ) -- So the putter in the other file interprets this
+                -- blank to mean createGroup instead of insertPid. That looks goofy in 
+                -- haskell but it's already like that in REST so we wouldn't gain
+                -- generality by splitting it up.
+         , (ourTemplate >>> badRequest) "Just GET or PUT please"
+         ] )
 
-onGet :: String -> ServerPartT IO Response
+onGet :: String -> ServerPartT IO Response 
 onPut :: String -> String -> ServerPartT IO Response
---onPut url = (ourTemplate >>> ok) $ h3 $ toHtml $ "You put "++url
+
+--uiBundle is everything the UI needs to know from the lower level...
 onGet url     = liftIO ( uiBundle url        >>= renderGet url ) >>= (ourTemplate >>> ok) 
+
+--putSomething may or may not hit the filesystem, but either way it returns (). There's
+-- no point returning a success code because the repsonse to PUT is discarded by the UI anyway.
 onPut bod url = liftIO ( putSomething bod url >> renderPut     ) >>= (ourTemplate >>> ok) 
       
-renderPut :: IO Html
-renderPut = return $ toHtml ("Foo"::String)
+renderPut :: IO Html -- nobody reads the response, but it has to arrive before the JS UI redirects
+renderPut = return $ toHtml ("Foo"::String) -- to the new version of the cgroup page
 
 renderGet :: String -> UIBundle -> IO Html
 renderGet url (mounts,ei) = return $ do
@@ -53,7 +67,17 @@ renderGet url (mounts,ei) = return $ do
   table ! class_ "nav" $ tr ! class_ "nav" $ do
     td $ a ! href "/" $ "Help"
     forM_ (map (fst >>> makeLink True) mounts) td
-  ( either (toHtml >>> h1) (renderGroup url) ) ei
+  ( either instructions (renderGroup url) ) ei -- Can write the help here after the error message in the h1
+
+instructions :: String -> Html
+instructions title = 
+  h1 (toHtml title) >>
+  p "The nav bar shows mounted cgroup subsystems. Click on one to see the root cgroup in that subsystem." >>
+  p "The first column shows links to the children of the current group. This list may start with a link to the parent of the current group if the latter is not the root cgroup of a subsystem. Clicking on these links makes the addressed group the current one." >>
+  p "A new group in the current one can be created with the New button on the column header. This prompts for the name of the new group." >>
+  p "The second column shows PIDs in the current group. The third shows all other PIDs in the system. Clicking on those pulls them from whatever group of this subsytem they're in now, and inserts them in the current group." >>
+  p "Making changes to the cgroup state, i.e. adding groups or moving PIDs, requires that cgroups-webapp is running as root." 
+
 
 renderGroup :: String -> CGroupState -> Html
 renderGroup url (maybeparent, children, pidsin, pidsout) = do

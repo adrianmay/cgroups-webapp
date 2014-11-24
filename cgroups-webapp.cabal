@@ -49,7 +49,7 @@ executable cgroups-webapp
   -- Other library packages from which modules are imported.
   hs-source-dirs:      src
   main-is:             Main.hs
-  build-depends:       base ==4.6.*
+  build-depends:       base
   build-depends:       blaze-html
   build-depends:       happstack-server
   build-depends:       mtl
