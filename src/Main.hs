@@ -75,7 +75,7 @@ instructions title =
   p "The nav bar shows mounted cgroup subsystems. Click on one to see the root cgroup in that subsystem." >>
   p "The first column shows links to the children of the current group. This list may start with a link to the parent of the current group if the latter is not the root cgroup of a subsystem. Clicking on these links makes the addressed group the current one." >>
   p "A new group in the current one can be created with the New button on the column header. This prompts for the name of the new group." >>
-  p "The second column shows PIDs in the current group. The third shows all other PIDs in the system. Clicking on those pulls them from whatever group of this subsytem they're in now, and inserts them in the current group." >>
+  p "The second column shows PIDs in the current group. The third shows all other PIDs in the system. Clicking on those pulls them from whatever group of this subsytem they're in now, and inserts them in the current group. Not all PIDs want to move, but I don't know why." >>
   p "Making changes to the cgroup state, i.e. adding groups or moving PIDs, requires that cgroups-webapp is running as root." 
 
 
