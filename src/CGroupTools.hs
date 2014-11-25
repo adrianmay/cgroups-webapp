@@ -9,6 +9,7 @@ import Control.Arrow
 import Control.Applicative
 import Control.Monad
 import System.IO
+import System.IO.Error
 import System.Directory
 import Data.List
 import Data.Monoid
@@ -147,11 +148,8 @@ pidsAt dir = readFile (dir ++ "/tasks") >>= ( return . words )
 -- PUT stuff ----------------------------------------------------
 -- TODO: 
 --   Catch file op failures 
---   Sanity check pid
 
-putSomething :: String -> String -> IO ()
--- called by ajax and return discarded
--- see result on next get
+putSomething :: String -> String -> IO (Maybe String)
 putSomething bod ('/':url) = 
   let 
     subsys = takeWhile (/='/') url
@@ -164,26 +162,25 @@ putSomething bod ('/':url) =
         case bod of 
           [] -> createGroup (mp ++ "/" ++ parent) (mp ++ "/" ++ group)
           _  -> insertPid (mp ++ "/" ++ group) bod
-      _ -> return ()
+      _ -> return $ Just "Bad subsystem"
 
--- returns nothing because the UI won't check...
--- it does this by ajax and discards the result
--- then re-GETs some relevant group
-createGroup :: String -> String -> IO ()
+createGroup :: String -> String -> IO (Maybe String)
 createGroup parentpath grouppath = 
   doesDirectoryExist grouppath >>= choose 
-    ( return () ) -- bomb out if the thing to create exists
+    ( return (Just "That group exists already") ) -- bomb out if the thing to create exists
     ( doesDirectoryExist parentpath >>= choose -- or its parent doesn't
-      ( createDirectory grouppath ) -- finally hit the metal
-      ( return () )
+      ( catchIOError (createDirectory grouppath >> return Nothing) 
+                     (\e -> return (Just "Create directory failed")) )
+      ( return (Just "Parent of new group not found") )
     )
 
-insertPid :: String -> String -> IO ()
+insertPid :: String -> String -> IO (Maybe String)
 insertPid grouppath pid =
   --sanity check pid
   case intFromStringOr 0 pid of
-    0 -> return ()
-    _ -> writeFile (grouppath++"/tasks") (pid++"\n")
+    0 -> return (Just "Bad PID")
+    _ -> catchIOError ( writeFile (grouppath++"/tasks") (pid++"\n") >> (return Nothing) ) 
+                      (\e -> return (Just "Insert PID failed"))
 
 
 

@@ -52,14 +52,13 @@ onGet :: String -> ServerPartT IO Response
 onPut :: String -> String -> ServerPartT IO Response
 
 --uiBundle is everything the UI needs to know from the lower level...
-onGet url     = liftIO ( uiBundle url        >>= renderGet url ) >>= (ourTemplate >>> ok) 
+onGet url     = liftIO ( uiBundle url         >>= renderGet url ) >>= (ourTemplate >>> ok) 
 
---putSomething may or may not hit the filesystem, but either way it returns (). There's
--- no point returning a success code because the repsonse to PUT is discarded by the UI anyway.
-onPut bod url = liftIO ( putSomething bod url >> renderPut     ) >>= (ourTemplate >>> ok) 
+onPut bod url = liftIO ( putSomething bod url >>= renderPut     ) >>= (toResponse >>> ok) 
       
-renderPut :: IO Html -- nobody reads the response, but it has to arrive before the JS UI redirects
-renderPut = return $ toHtml ("Foo"::String) -- to the new version of the cgroup page
+renderPut :: (Maybe String) -> IO Html -- nobody reads the response, but it has to arrive before the JS UI redirects
+renderPut = maybe ( (return.toHtml) (""::String)) -- to the new version of the cgroup page
+                  ( return.toHtml )
 
 renderGet :: String -> UIBundle -> IO Html
 renderGet url (mounts,ei) = return $ do
@@ -134,7 +133,11 @@ myscript = script $ toHtml ("                      \
   \      type:'PUT',                             \n\
   \      url:abs,                                \n\
   \      data:'',                                \n\
-  \      success:function () {                   \n\
+  \      error:function (x, res) {               \n\
+  \        alert('ERROR');                       \n\
+  \      },                                      \n\
+  \      success:function (res) {                \n\
+  \        if (res!='') alert(res);              \n\
   \        window.location.replace(abs);         \n\
   \    }});                                      \n\
   \  }                                           \n\
@@ -145,13 +148,17 @@ myscript = script $ toHtml ("                      \
   \    type:'PUT',                               \n\
   \    url:group,                                \n\
   \    data:{'pid':pid},                         \n\
-  \    success:function () {                     \n\
+  \    error:function (x, res) {                 \n\
+  \      alert('ERROR'+res);                     \n\
+  \    },                                        \n\
+  \    success:function (res) {                  \n\
+  \      if (res!='') alert(res);                \n\
   \      window.location.replace(group);         \n\
   \  }});                                        \n\
   \}                                             \n\
   \                                              \n\
   \                                              \n\
-  \"::String)
+  \ "::String)
 
 mystyle = H.style $ toHtml ("\
   \td { vertical-align:top; } \n\
